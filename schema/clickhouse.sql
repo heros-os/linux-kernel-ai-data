@@ -47,8 +47,7 @@ CREATE TABLE IF NOT EXISTS kernel_history.commits
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(commit_date)
-ORDER BY (commit_date, commit_hash)
-PRIMARY KEY (commit_hash)
+ORDER BY (commit_hash, commit_date)
 SETTINGS index_granularity = 8192;
 
 -- File changes table: stores per-file diffs (the training signal)
@@ -90,24 +89,9 @@ PARTITION BY substring(commit_hash, 1, 2)  -- Partition by first 2 chars of hash
 ORDER BY (commit_hash, file_path)
 SETTINGS index_granularity = 8192;
 
--- Materialized view for subsystem statistics
-CREATE MATERIALIZED VIEW IF NOT EXISTS kernel_history.subsystem_stats
-ENGINE = SummingMergeTree()
-ORDER BY (subsystem, toYYYYMM(inserted_at))
-POPULATE
-AS SELECT
-    subsystem,
-    toYYYYMM(inserted_at) as month,
-    count() as change_count,
-    sum(lines_added) as total_additions,
-    sum(lines_deleted) as total_deletions
-FROM kernel_history.file_changes
-GROUP BY subsystem, toYYYYMM(inserted_at);
+-- Index for fast commit message search (optional, run after data import)
+-- ALTER TABLE kernel_history.commits ADD INDEX idx_subject_search subject TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 4;
 
--- Index for fast commit message search
-ALTER TABLE kernel_history.commits
-    ADD INDEX idx_subject_search subject TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 4;
+-- Index for file path filtering (optional, run after data import)
+-- ALTER TABLE kernel_history.file_changes ADD INDEX idx_file_path file_path TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 4;
 
--- Index for file path filtering
-ALTER TABLE kernel_history.file_changes
-    ADD INDEX idx_file_path file_path TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 4;
