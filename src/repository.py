@@ -17,29 +17,56 @@ logger = logging.getLogger(__name__)
 
 class RepositoryManager:
     """
-    Manages Git repositories for the Linux kernel extraction pipeline.
+    Manages Git repositories for the extraction pipeline.
     
     Handles:
-    - Cloning the mainline kernel (bare clone for efficiency)
+    - Cloning any Git repository (bare clone for efficiency)
     - Fetching historical repositories for pre-Git history
     - Grafting historical commits to create a unified timeline
     """
     
-    def __init__(self, data_dir: Optional[Path] = None):
+    def __init__(
+        self,
+        data_dir: Optional[Path] = None,
+        repo_url: Optional[str] = None,
+        repo_dir: Optional[str] = None
+    ):
         """
         Initialize the repository manager.
         
         Args:
             data_dir: Directory to store repositories. Defaults to settings.
+            repo_url: Git repository URL to clone. Defaults to Linux kernel.
+            repo_dir: Local directory name for the repository.
         """
         self.data_dir = data_dir or settings.repository.data_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Custom repository support
+        self.repo_url = repo_url or settings.repository.kernel_url
+        
+        # Auto-generate directory name from URL if not provided
+        if repo_dir:
+            self._repo_dir = repo_dir
+        elif repo_url:
+            # Extract repo name from URL (e.g., "xbmc/xbmc.git" -> "xbmc.git")
+            self._repo_dir = repo_url.rstrip('/').split('/')[-1]
+            if not self._repo_dir.endswith('.git'):
+                self._repo_dir += '.git'
+        else:
+            self._repo_dir = settings.repository.kernel_dir
+        
         self._repo: Optional[pygit2.Repository] = None
     
     @property
     def kernel_path(self) -> Path:
-        """Path to the kernel repository."""
-        return self.data_dir / settings.repository.kernel_dir
+        """Path to the repository (kept for backward compatibility)."""
+        return self.data_dir / self._repo_dir
+    
+    @property
+    def repo_path(self) -> Path:
+        """Path to the repository."""
+        return self.data_dir / self._repo_dir
     
     @property
     def repo(self) -> pygit2.Repository:
@@ -55,7 +82,7 @@ class RepositoryManager:
     
     def clone_kernel(self, force: bool = False) -> Path:
         """
-        Clone the mainline Linux kernel repository.
+        Clone the Git repository.
         
         Uses a bare clone (--bare) for efficiency since we only need
         to read the Git objects, not check out the working directory.
@@ -74,24 +101,24 @@ class RepositoryManager:
                 import shutil
                 shutil.rmtree(repo_path)
             else:
-                logger.info(f"Kernel repository already exists at {repo_path}")
+                logger.info(f"Repository already exists at {repo_path}")
                 return repo_path
         
-        logger.info(f"Cloning kernel repository from {settings.repository.kernel_url}")
-        logger.info("This may take 30+ minutes depending on your connection...")
+        logger.info(f"Cloning repository from {self.repo_url}")
+        logger.info("This may take a while depending on repository size...")
         
         # Use subprocess for better progress feedback during clone
         cmd = [
             "git", "clone", "--bare", "--progress",
-            settings.repository.kernel_url,
+            self.repo_url,
             str(repo_path)
         ]
         
         try:
             subprocess.run(cmd, check=True)
-            logger.info(f"Successfully cloned kernel to {repo_path}")
+            logger.info(f"Successfully cloned to {repo_path}")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to clone kernel repository: {e}")
+            logger.error(f"Failed to clone repository: {e}")
             raise
         
         return repo_path

@@ -40,9 +40,21 @@ def main():
         description="Extract Linux kernel commit history for LLM training"
     )
     parser.add_argument(
+        "--repo",
+        type=str,
+        default=None,
+        help="Git repository URL to extract (default: Linux kernel)"
+    )
+    parser.add_argument(
+        "--repo-name",
+        type=str,
+        default=None,
+        help="Local directory name for the repository"
+    )
+    parser.add_argument(
         "--clone",
         action="store_true",
-        help="Clone the kernel repository (first run)"
+        help="Clone the repository (first run)"
     )
     parser.add_argument(
         "--init-db",
@@ -87,7 +99,7 @@ def main():
     args = parser.parse_args()
     
     console.print(Panel.fit(
-        "[bold blue]Linux Kernel Chronological Intelligence Engine[/bold blue]\n"
+        "[bold blue]Git Repository Extraction Pipeline[/bold blue]\n"
         "[dim]Extracting commit history for LLM training[/dim]",
         border_style="blue"
     ))
@@ -95,18 +107,26 @@ def main():
     # Ensure directories exist
     settings.ensure_directories()
     
-    # Repository management
-    repo_manager = RepositoryManager()
+    # Repository management - support custom repos
+    repo_manager = RepositoryManager(
+        repo_url=args.repo,
+        repo_dir=args.repo_name
+    )
+    
+    # Show which repo we're using
+    if args.repo:
+        console.print(f"[cyan]Repository:[/cyan] {args.repo}")
+    else:
+        console.print("[cyan]Repository:[/cyan] Linux Kernel (default)")
     
     if args.clone:
-        console.print("\n[yellow]Cloning kernel repository...[/yellow]")
-        console.print("[dim]This may take 30+ minutes on first run[/dim]")
+        console.print("\n[yellow]Cloning repository...[/yellow]")
         repo_manager.clone_kernel()
     
     # Verify repository exists
     if not repo_manager.kernel_path.exists():
         console.print(
-            "[red]Kernel repository not found![/red]\n"
+            "[red]Repository not found![/red]\n"
             "Run with --clone to download it first."
         )
         sys.exit(1)
