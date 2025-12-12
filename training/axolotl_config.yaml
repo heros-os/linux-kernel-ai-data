@@ -1,0 +1,50 @@
+# Training Configuration for Axolotl
+# Fine-tune open-source models on Linux kernel commit data
+# Supports: Qwen 2.5 Coder, DeepSeek Coder, CodeLlama, Mistral
+
+base_model: Qwen/Qwen2.5-Coder-14B-Instruct
+model_type: AutoModelForCausalLM
+tokenizer_type: AutoTokenizer
+trust_remote_code: true
+
+# Load in 4-bit for reduced VRAM usage (QLoRA)
+load_in_4bit: true
+adapter: qlora
+lora_r: 64
+lora_alpha: 32
+lora_dropout: 0.05
+lora_target_linear: true # Apply LoRA to all linear layers
+
+# Dataset configuration
+datasets:
+  - path: ./exports/training_data.jsonl
+    type: alpaca
+    ds_type: json
+
+# Training parameters
+sequence_len: 4096
+sample_packing: true
+pad_to_sequence_len: true
+
+micro_batch_size: 1
+gradient_accumulation_steps: 8
+num_epochs: 3
+learning_rate: 2e-4
+lr_scheduler: cosine
+warmup_ratio: 0.03
+weight_decay: 0.01
+
+optimizer: adamw_torch_fused
+bf16: true
+tf32: true
+gradient_checkpointing: true
+flash_attention: true
+
+# Output
+output_dir: ./models/kernel-coder-14b-lora
+logging_steps: 10
+save_steps: 500
+eval_steps: 500
+# Weights & Biases logging (optional)
+# wandb_project: kernel-coder
+# wandb_entity: your-username
