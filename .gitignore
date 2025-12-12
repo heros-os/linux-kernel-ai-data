@@ -69,5 +69,11 @@ linux.git/
 history.git/
 *.log
 
+# Large data files
+exports/
+
+# Model files (too large for GitHub)
+models/
+
 # ClickHouse data (if running locally)
 clickhouse-data/
