@@ -1,0 +1,16 @@
+# Core dependencies
+pygit2>=1.13.0
+clickhouse-driver>=0.2.6
+clickhouse-connect>=0.7.0
+tqdm>=4.66.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dateutil>=2.8.2
+
+# Development
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# Utilities
+rich>=13.7.0
+chardet>=5.2.0
