@@ -1,6 +1,9 @@
 -- Linux Kernel Chronological Intelligence Engine
 -- ClickHouse Schema Definition
 -- Database: kernel_history
+-- 
+-- NOTE: Tables have no partitioning to avoid "Too many partitions per INSERT" errors
+-- Partitioning can be added later if needed for data lifecycle management
 
 -- Create database
 CREATE DATABASE IF NOT EXISTS kernel_history;
@@ -37,7 +40,7 @@ CREATE TABLE IF NOT EXISTS kernel_history.commits
     total_deletions UInt32 DEFAULT 0,
     
     -- Trailer tags extracted from commit message
-    fixes_hash Nullable(FixedString(40)) CODEC(ZSTD(1)),  -- Fixes: <hash>
+    fixes_hash Nullable(FixedString(40)) CODEC(ZSTD(1)),
     signed_off_by Array(String) CODEC(ZSTD(1)),
     reviewed_by Array(String) CODEC(ZSTD(1)),
     acked_by Array(String) CODEC(ZSTD(1)),
@@ -46,8 +49,7 @@ CREATE TABLE IF NOT EXISTS kernel_history.commits
     inserted_at DateTime DEFAULT now()
 )
 ENGINE = MergeTree()
-PARTITION BY toYYYYMM(commit_date)
-ORDER BY (commit_hash, commit_date)
+ORDER BY (commit_hash)
 SETTINGS index_granularity = 8192;
 
 -- File changes table: stores per-file diffs (the training signal)
@@ -58,14 +60,14 @@ CREATE TABLE IF NOT EXISTS kernel_history.file_changes
     
     -- File identification
     file_path LowCardinality(String) CODEC(ZSTD(1)),
-    old_file_path Nullable(String) CODEC(ZSTD(1)),  -- For renames
+    old_file_path Nullable(String) CODEC(ZSTD(1)),
     
     -- Change type: 'A' (Add), 'M' (Modify), 'D' (Delete), 'R' (Rename), 'C' (Copy)
     change_type Enum8('A' = 1, 'M' = 2, 'D' = 3, 'R' = 4, 'C' = 5),
     
     -- File type classification
     file_extension LowCardinality(String) CODEC(ZSTD(1)),
-    subsystem LowCardinality(String) CODEC(ZSTD(1)),  -- e.g., 'mm', 'kernel/sched', 'drivers/net'
+    subsystem LowCardinality(String) CODEC(ZSTD(1)),
     
     -- The diff content
     diff_hunk String CODEC(ZSTD(3)),
@@ -85,7 +87,6 @@ CREATE TABLE IF NOT EXISTS kernel_history.file_changes
     inserted_at DateTime DEFAULT now()
 )
 ENGINE = MergeTree()
-PARTITION BY substring(commit_hash, 1, 2)  -- Partition by first 2 chars of hash
 ORDER BY (commit_hash, file_path)
 SETTINGS index_granularity = 8192;
 

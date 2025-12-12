@@ -144,15 +144,9 @@ def main():
     
     # Get commit list
     console.print("\n[yellow]Loading commit history...[/yellow]")
+    console.print("[dim]Walking commit graph (this may take a minute)...[/dim]")
     
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task("Walking commit graph...", total=None)
-        commit_hashes = repo_manager.get_all_commit_hashes()
-        progress.update(task, completed=True)
+    commit_hashes = repo_manager.get_all_commit_hashes()
     
     total_commits = len(commit_hashes)
     console.print(f"[green]Found {total_commits:,} commits[/green]")
