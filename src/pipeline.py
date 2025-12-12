@@ -11,6 +11,8 @@ from multiprocessing import Queue, Process, Event
 from queue import Empty
 from typing import Optional, Callable
 from dataclasses import dataclass
+import json
+from datetime import datetime
 import time
 
 import pygit2
@@ -273,6 +275,36 @@ class ExtractionPipeline:
                         
                         # Update progress
                         pbar.update(len(result.commits))
+                        
+                        # Calculate speed and estimated completion
+                        elapsed = time.time() - pbar.start_t
+                        speed = self.commits_processed / elapsed if elapsed > 0 else 0
+                        
+                        pbar.set_postfix({
+                            "files": self.files_processed,
+                            "errors": self.errors_count,
+                            "speed": f"{speed:.1f}/s"
+                        })
+
+                        # Write status file for external monitoring
+                        status_data = {
+                            "timestamp": datetime.now().isoformat(),
+                            "commits_processed": self.commits_processed,
+                            "total_commits": total_commits,
+                            "progress_percent": round((self.commits_processed / total_commits) * 100, 2),
+                            "files_processed": self.files_processed,
+                            "errors_count": self.errors_count,
+                            "speed_commits_per_sec": round(speed, 2),
+                            "batches_processed": batches_received,
+                            "total_batches": total_batches,
+                            "status": "running"
+                        }
+                        
+                        try:
+                            with open("extraction_status.json", "w") as f:
+                                json.dump(status_data, f, indent=2)
+                        except Exception:
+                            pass  # Ignore status write errors
                         
                         if progress_callback:
                             progress_callback(self.commits_processed, total_commits)

@@ -97,6 +97,18 @@ def main():
         action="store_true",
         help="Show statistics only, don't export"
     )
+    parser.add_argument(
+        "--min-quality",
+        type=float,
+        default=0.0,
+        help="Minimum heuristic quality score (0-100)"
+    )
+    parser.add_argument(
+        "--min-ai-score",
+        type=float,
+        default=0.0,
+        help="Minimum AI quality score (1-5)"
+    )
     
     args = parser.parse_args()
     
@@ -149,7 +161,9 @@ def main():
             exclude_subsystems=args.exclude_subsystems,
             limit=args.limit,
             sample_ratio=args.sample,
-            include_metadata=args.include_metadata
+            include_metadata=args.include_metadata,
+            min_heuristic_score=args.min_quality,
+            min_ai_score=args.min_ai_score
         )
         
         console.print(f"\n[bold green]Export complete![/bold green]")

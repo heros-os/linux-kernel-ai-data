@@ -97,7 +97,7 @@ class ExtractionSettings(BaseSettings):
         description="Number of worker processes for extraction"
     )
     batch_size: int = Field(
-        default=1000,
+        default=100,
         description="Number of commits per batch for workers"
     )
     queue_size: int = Field(
@@ -193,6 +193,22 @@ class ExportSettings(BaseSettings):
         return Path(v) if isinstance(v, str) else v
 
 
+
+class QualitySettings(BaseSettings):
+    """Settings for quality scoring."""
+    
+    model_config = SettingsConfigDict(env_prefix="QUALITY_")
+    
+    # AI Scoring
+    ollama_url: str = Field(default="http://localhost:11434", description="Ollama API URL")
+    model_name: str = Field(default="qwen2.5-coder:7b", description="Model to use for scoring")
+    batch_size: int = Field(default=50, description="Batch size for AI scoring")
+    
+    # Thresholds
+    min_heuristic_score: float = Field(default=30.0, description="Minimum heuristic score to run AI scoring")
+    min_ai_score: float = Field(default=3.0, description="Minimum AI score to include in export")
+
+
 class Settings(BaseSettings):
     """Main configuration container."""
     
@@ -207,6 +223,7 @@ class Settings(BaseSettings):
     repository: RepositorySettings = Field(default_factory=RepositorySettings)
     extraction: ExtractionSettings = Field(default_factory=ExtractionSettings)
     export: ExportSettings = Field(default_factory=ExportSettings)
+    quality: QualitySettings = Field(default_factory=QualitySettings)
     
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")

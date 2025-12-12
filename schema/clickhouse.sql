@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS kernel_history.commits
     reviewed_by Array(String) CODEC(ZSTD(1)),
     acked_by Array(String) CODEC(ZSTD(1)),
     
+    -- Quality scoring
+    heuristic_score Float32 DEFAULT 0.0,
+    ai_quality_score Nullable(Float32),
+    quality_flags UInt32 DEFAULT 0,
+    
     -- Insertion timestamp
     inserted_at DateTime DEFAULT now()
 )
@@ -79,6 +84,9 @@ CREATE TABLE IF NOT EXISTS kernel_history.file_changes
     -- Statistics
     lines_added UInt32 CODEC(T64, ZSTD(1)),
     lines_deleted UInt32 CODEC(T64, ZSTD(1)),
+    
+    -- Quality scoring
+    relevance_score Float32 DEFAULT 0.0,
     
     -- Binary file flag
     is_binary UInt8 DEFAULT 0,

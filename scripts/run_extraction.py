@@ -70,7 +70,7 @@ def main():
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=1000,
+        default=100,
         help="Commits per batch"
     )
     parser.add_argument(
@@ -165,6 +165,8 @@ def main():
     # Run extraction
     console.print(f"\n[yellow]Starting extraction...[/yellow]")
     console.print(f"[dim]Workers: {args.workers or 'auto'}, Batch size: {args.batch_size}[/dim]")
+    console.print(f"[dim]Status monitor: cat extraction_status.json[/dim]")
+    console.print(f"[dim]Note: Extraction is CPU-bound. GPU will be used for AI scoring in separate step.[/dim]")
     
     pipeline = ExtractionPipeline(
         repo_path=str(repo_manager.kernel_path),

@@ -15,6 +15,7 @@ import chardet
 import pygit2
 
 from config.settings import settings
+from src.quality_scorer import QualityScorer
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,8 @@ class CommitData:
     signed_off_by: list[str] = field(default_factory=list)
     reviewed_by: list[str] = field(default_factory=list)
     acked_by: list[str] = field(default_factory=list)
+    heuristic_score: float = 0.0
+    quality_flags: int = 0
 
 
 class DiffExtractor:
@@ -105,6 +108,7 @@ class DiffExtractor:
         self.max_diff_size = settings.extraction.max_diff_size
         self.include_extensions = set(settings.extraction.include_extensions)
         self.exclude_paths = settings.extraction.exclude_paths
+        self.scorer = QualityScorer()
     
     def extract_commit(self, commit: pygit2.Commit) -> tuple[CommitData, list[FileChange]]:
         """
@@ -154,13 +158,36 @@ class DiffExtractor:
             acked_by=acked_by
         )
         
+        # Calculate heuristic score
+        commit_data.heuristic_score = self.scorer.calculate_heuristic_score(
+            subject=subject,
+            body=body,
+            files_changed=0,  # Will update after file extraction
+            signed_off_by=signed_off_by,
+            reviewed_by=reviewed_by,
+            acked_by=acked_by,
+            fixes_hash=fixes_hash
+        )
+        
         # Extract file changes
         file_changes = self._extract_file_changes(commit)
         
         # Update statistics
         commit_data.files_changed = len(file_changes)
         commit_data.total_additions = sum(fc.lines_added for fc in file_changes)
+        commit_data.total_additions = sum(fc.lines_added for fc in file_changes)
         commit_data.total_deletions = sum(fc.lines_deleted for fc in file_changes)
+        
+        # Update score with file count
+        commit_data.heuristic_score = self.scorer.calculate_heuristic_score(
+            subject=subject,
+            body=body,
+            files_changed=commit_data.files_changed,
+            signed_off_by=signed_off_by,
+            reviewed_by=reviewed_by,
+            acked_by=acked_by,
+            fixes_hash=fixes_hash
+        )
         
         return commit_data, file_changes
     

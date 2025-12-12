@@ -82,7 +82,10 @@ class TrainingDataExporter:
         subsystems: Optional[list[str]] = None,
         exclude_subsystems: Optional[list[str]] = None,
         limit: Optional[int] = None,
-        sample_ratio: float = 1.0
+        limit: Optional[int] = None,
+        sample_ratio: float = 1.0,
+        min_heuristic_score: float = 0.0,
+        min_ai_score: float = 0.0
     ) -> str:
         """
         Build the SQL query for extracting training data.
@@ -141,6 +144,12 @@ class TrainingDataExporter:
         
         if limit:
             query += f"\n        LIMIT {limit}"
+            
+        if min_heuristic_score > 0:
+            query += f"\n            AND c.heuristic_score >= {min_heuristic_score}"
+            
+        if min_ai_score > 0:
+            query += f"\n            AND c.ai_quality_score >= {min_ai_score}"
         
         return query
     
@@ -153,7 +162,10 @@ class TrainingDataExporter:
         subsystems: Optional[list[str]] = None,
         exclude_subsystems: Optional[list[str]] = None,
         limit: Optional[int] = None,
+        limit: Optional[int] = None,
         sample_ratio: float = 1.0,
+        min_heuristic_score: float = 0.0,
+        min_ai_score: float = 0.0,
         batch_size: int = 10000
     ) -> Iterator[TrainingExample]:
         """
@@ -170,7 +182,11 @@ class TrainingDataExporter:
             subsystems=subsystems,
             exclude_subsystems=exclude_subsystems,
             limit=limit,
-            sample_ratio=sample_ratio
+            exclude_subsystems=exclude_subsystems,
+            limit=limit,
+            sample_ratio=sample_ratio,
+            min_heuristic_score=min_heuristic_score,
+            min_ai_score=min_ai_score
         )
         
         logger.debug(f"Executing query: {query[:200]}...")
@@ -213,7 +229,11 @@ class TrainingDataExporter:
         exclude_subsystems: Optional[list[str]] = None,
         limit: Optional[int] = None,
         sample_ratio: float = 1.0,
-        include_metadata: bool = False
+        limit: Optional[int] = None,
+        sample_ratio: float = 1.0,
+        include_metadata: bool = False,
+        min_heuristic_score: float = 0.0,
+        min_ai_score: float = 0.0
     ) -> int:
         """
         Export training data to a JSONL file.
@@ -247,7 +267,10 @@ class TrainingDataExporter:
                 subsystems=subsystems,
                 exclude_subsystems=exclude_subsystems,
                 limit=limit,
-                sample_ratio=sample_ratio
+                limit=limit,
+                sample_ratio=sample_ratio,
+                min_heuristic_score=min_heuristic_score,
+                min_ai_score=min_ai_score
             )
             
             for example in tqdm(examples, desc="Exporting to JSONL"):
