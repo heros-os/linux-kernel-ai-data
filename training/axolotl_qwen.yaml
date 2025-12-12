@@ -1,8 +1,8 @@
 # Training Configuration for Axolotl
-# Fine-tune DeepSeek Coder on XBMC commit data
+# Fine-tune Qwen 2.5 Coder 7B on XBMC commit data
 # Works on RTX 3090/4090 with 24GB VRAM
 
-base_model: deepseek-ai/deepseek-coder-6.7b-instruct
+base_model: Qwen/Qwen2.5-Coder-7B-Instruct
 model_type: AutoModelForCausalLM
 tokenizer_type: AutoTokenizer
 trust_remote_code: true
@@ -41,11 +41,7 @@ gradient_checkpointing: true
 flash_attention: true
 
 # Output
-output_dir: ./models/xbmc-coder-deepseek-lora
+output_dir: ./models/xbmc-coder-qwen-lora
 logging_steps: 10
 save_steps: 500
 eval_steps: 500
-
-# Weights & Biases logging (optional)
-# wandb_project: xbmc-coder
-# wandb_entity: your-username
