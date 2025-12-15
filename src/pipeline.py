@@ -247,14 +247,17 @@ class ExtractionPipeline:
             batches_sent = 0
             batches_received = 0
             
-            # Producer: Send batches to workers
-            with tqdm(total=total_commits, desc="Extracting commits") as pbar:
-                # Send initial batches
-                for batch in batches:
-                    self.work_queue.put(batch)
-                    batches_sent += 1
+            # Start producer thread to keep queues flowing
+            def producer():
+                for batch_item in batches:
+                    self.work_queue.put(batch_item)
                 
-                # Collect results
+            import threading
+            producer_thread = threading.Thread(target=producer, daemon=True)
+            producer_thread.start()
+            
+            # Consumer: Collect results
+            with tqdm(total=total_commits, desc="Extracting commits") as pbar:
                 while batches_received < total_batches:
                     try:
                         result: ResultBatch = self.result_queue.get(timeout=30.0)
@@ -316,6 +319,9 @@ class ExtractionPipeline:
                         if alive == 0:
                             logger.error("All workers died!")
                             break
+                            
+            # Wait for producer (it should be done if we received all batches)
+            producer_thread.join(timeout=1.0)
                 
         finally:
             self._stop_workers()

@@ -77,3 +77,12 @@ models/
 
 # ClickHouse data (if running locally)
 clickhouse-data/
+
+# HuggingFace Datasets
+huggingface_datasets/
+
+# Training Outputs
+kernel_reviewer/
+*_adapters/
+*_gguf/
+checkout/

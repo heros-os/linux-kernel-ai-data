@@ -1,67 +1,98 @@
-# Linux Kernel Chronological Intelligence Engine
+# Linux Kernel AI Training Data Pipeline
 
-A high-performance data engineering pipeline to extract, store, and structure 30+ years of Linux kernel commit history for LLM instruction tuning.
-
-## Overview
-
-This project implements a comprehensive framework for:
-
-- **Extracting** 1.3M+ commits from the Linux kernel repository (including pre-Git history)
-- **Storing** file-level diffs and metadata in ClickHouse for analytical querying
-- **Exporting** structured training data in JSONL format for LLM fine-tuning
+Extract, filter, and prepare the entire Linux kernel git history for LLM fine-tuning.
 
 ## Features
 
-- 🚀 **High-Performance Extraction**: Uses `pygit2` (libgit2 bindings) for direct ODB access
-- ⚡ **Parallel Processing**: Producer-consumer multiprocessing pipeline
-- 📊 **Optimized Storage**: ClickHouse columnar database with ZSTD compression
-- 🎯 **File-Level Granularity**: Per-file diffs with code context (before/after)
-- 📝 **Instruction Tuning Ready**: CommitPack/OctoPack compatible JSONL export
-
-## Requirements
-
-- Python 3.10+
-- ClickHouse (via Docker or native installation)
-- Git
-- 64GB+ RAM (recommended for full kernel extraction)
-- 1TB+ NVMe SSD storage
+- **Full History Extraction**: 1.4M+ commits with diffs and metadata
+- **Quality Scoring**: Heuristic + AI-based filtering
+- **SOTA Enhancements**: Commit chains, author expertise, revert detection
+- **Multiple Export Modes**: Review, BugFix, Security specialized datasets
 
 ## Quick Start
 
-```bash
-# Clone and setup
-git clone https://github.com/YOUR_USERNAME/linux-kernel-ai-data.git
-cd linux-kernel-ai-data
-pip install -r requirements.txt
-
-# Start ClickHouse
+```powershell
+# 1. Start ClickHouse
 docker-compose up -d
 
-# Initialize database
-python scripts/init_db.py
+# 2. Clone kernel and extract (auto-resumes on failure)
+python scripts/run_extraction.py --clone --batch-size 50 --workers 8 --auto-resume
 
-# Run extraction (starts with kernel clone)
-python scripts/run_extraction.py
+# 3. Post-process
+python scripts/classify_commits.py
+python scripts/build_commit_chains.py
+python scripts/build_author_expertise.py
 
-# Export training data
-python scripts/export_training_data.py --output training_data.jsonl
+# 4. Export training data
+python scripts/export_training_data.py -o exports/kernel_training.jsonl --min-quality 50
+
+# 5. Validate
+python scripts/validate_data.py exports/kernel_training.jsonl
 ```
 
 ## Project Structure
 
 ```
-├── config/settings.py      # Configuration management
-├── schema/clickhouse.sql   # Database DDL
+├── config/             # Settings (ClickHouse, extraction params)
+├── schema/             # ClickHouse SQL schema
 ├── src/
-│   ├── repository.py       # Git repository management
-│   ├── extractor.py        # Commit/diff extraction
-│   ├── pipeline.py         # Multiprocessing orchestration
-│   ├── writer.py           # ClickHouse batch writer
-│   └── exporter.py         # JSONL training data export
-├── scripts/                # Runner scripts
-└── tests/                  # Unit tests
+│   ├── extractor.py    # Commit/diff extraction
+│   ├── pipeline.py     # Parallel processing
+│   ├── writer.py       # Database writer
+│   ├── exporter.py     # JSONL export
+│   └── quality_scorer.py
+├── scripts/
+│   ├── run_extraction.py
+│   ├── classify_commits.py
+│   ├── build_commit_chains.py
+│   ├── build_author_expertise.py
+│   ├── export_specialized.py
+│   ├── score_commits.py
+│   └── validate_data.py
+├── configs/
+│   └── axolotl_kernel.yaml  # Ready-to-use training config
+└── tests/
 ```
+
+## Export Modes
+
+| Mode     | Command                                 | Use Case                |
+| -------- | --------------------------------------- | ----------------------- |
+| Standard | `export_training_data.py`               | General fine-tuning     |
+| Security | `export_specialized.py --mode security` | CVE/vulnerability fixes |
+| BugFix   | `export_specialized.py --mode bugfix`   | Bug→Fix pairs           |
+| Review   | `export_specialized.py --mode review`   | Code review training    |
+
+## Filtering Options
+
+```powershell
+# High quality only
+python scripts/export_training_data.py --min-quality 60 --min-ai-score 4
+
+# Security commits only
+python scripts/export_training_data.py --tags security
+
+# Exclude duplicates (backports)
+python scripts/export_training_data.py --exclude-tags backport
+
+# Specific subsystem
+python scripts/export_training_data.py --subsystems mm kernel/sched
+```
+
+## Training with Axolotl
+
+```bash
+# In WSL with GPU
+accelerate launch -m axolotl.cli.train configs/axolotl_kernel.yaml
+```
+
+## Requirements
+
+- Python 3.10+
+- ClickHouse (via Docker)
+- ~100GB storage for full extraction
+- 16GB+ RAM recommended
 
 ## License
 
-MIT License
+MIT

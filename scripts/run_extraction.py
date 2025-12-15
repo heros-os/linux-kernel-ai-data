@@ -11,7 +11,9 @@ Orchestrates the full extraction pipeline:
 
 import argparse
 import logging
+import logging
 import sys
+import json
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -33,6 +35,27 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+CHECKPOINT_FILE = "extraction_checkpoint.json"
+
+def save_checkpoint(offset: int):
+    """Save the current offset to a checkpoint file."""
+    try:
+        with open(CHECKPOINT_FILE, 'w') as f:
+            json.dump({"offset": offset, "timestamp": str(logging.Formatter().formatTime(logging.makeLogRecord({})))}, f)
+    except Exception as e:
+        logger.warning(f"Failed to save checkpoint: {e}")
+
+def load_checkpoint() -> int:
+    """Load the last offset from checkpoint file."""
+    if not Path(CHECKPOINT_FILE).exists():
+        return 0
+    try:
+        with open(CHECKPOINT_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get("offset", 0)
+    except Exception:
+        return 0
 
 
 def main():
@@ -78,6 +101,17 @@ def main():
         type=int,
         default=None,
         help="Limit number of commits to process"
+    )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Skip first N commits (for chunked processing)"
+    )
+    parser.add_argument(
+        "--auto-resume",
+        action="store_true",
+        help="Automatically resume from last checkpoint"
     )
     parser.add_argument(
         "--resume",
@@ -151,6 +185,18 @@ def main():
     total_commits = len(commit_hashes)
     console.print(f"[green]Found {total_commits:,} commits[/green]")
     
+    # Handle auto-resume
+    start_offset = args.offset
+    if args.auto_resume:
+        checkpoint_offset = load_checkpoint()
+        if checkpoint_offset > 0:
+            console.print(f"[bold cyan]Auto-resume active: Loaded offset {checkpoint_offset:,}[/bold cyan]")
+            start_offset = max(start_offset, checkpoint_offset)
+
+    if start_offset:
+        commit_hashes = commit_hashes[start_offset:]
+        console.print(f"[yellow]Skipping first {start_offset:,} commits[/yellow]")
+        
     if args.limit:
         commit_hashes = commit_hashes[:args.limit]
         console.print(f"[yellow]Limited to {args.limit:,} commits[/yellow]")
@@ -184,9 +230,15 @@ def main():
                 ) if writer else None
             )
         else:
+            # Progress callback for checkpointing
+            def on_progress(processed_count, total):
+                current_offset = start_offset + processed_count
+                save_checkpoint(current_offset)
+
             commits, files, errors = pipeline.run(
                 commit_hashes,
-                resume_from=args.resume
+                resume_from=args.resume,
+                progress_callback=on_progress
             )
         
         # Final flush

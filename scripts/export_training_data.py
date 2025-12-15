@@ -109,6 +109,20 @@ def main():
         default=0.0,
         help="Minimum AI quality score (1-5)"
     )
+    parser.add_argument(
+        "--tags",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Include ONLY commits with these tags (e.g. security performance)"
+    )
+    parser.add_argument(
+        "--exclude-tags",
+        type=str,
+        nargs="+",
+        default=None,
+        help="Exclude commits with these tags"
+    )
     
     args = parser.parse_args()
     
@@ -163,7 +177,9 @@ def main():
             sample_ratio=args.sample,
             include_metadata=args.include_metadata,
             min_heuristic_score=args.min_quality,
-            min_ai_score=args.min_ai_score
+            min_ai_score=args.min_ai_score,
+            tags=args.tags,
+            exclude_tags=args.exclude_tags
         )
         
         console.print(f"\n[bold green]Export complete![/bold green]")

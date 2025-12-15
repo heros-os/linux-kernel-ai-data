@@ -369,6 +369,9 @@ class DiffExtractor:
             
             data = blob.data
             
+            if len(data) > 100000:
+                data = data[:100000]
+            
             # Detect encoding
             if isinstance(data, bytes):
                 # Check for binary content
@@ -380,11 +383,18 @@ class DiffExtractor:
                     return data.decode('utf-8')
                 except UnicodeDecodeError:
                     # Fallback to chardet
-                    detected = chardet.detect(data)
-                    encoding = detected.get('encoding', 'latin-1') or 'latin-1'
                     try:
+                        detected = chardet.detect(data)
+                        encoding = detected.get('encoding')
+                        
+                        if not encoding:
+                            # If chardet fails to detect, try latin-1 as last resort
+                            return data.decode('latin-1', errors='replace')
+                            
                         return data.decode(encoding, errors='replace')
-                    except Exception:
+                    except Exception as e:
+                        # If detection or decoding fails entirely, treat as binary
+                        logger.debug(f"Encoding detection failed: {e}")
                         return ""
             
             return data if isinstance(data, str) else ""
