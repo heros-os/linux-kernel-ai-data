@@ -41,7 +41,7 @@ print(f"  High Quality (>=70):  {high_q:,}")
 print(f"  Standard (>=50):      {standard:,}")
 
 # Show AI scoring progress
-pending = client.execute("SELECT count() FROM commits WHERE heuristic_score >= 30 AND ai_quality_score = 0 AND length(ai_score_reason) = 0")[0][0]
+pending = client.execute("SELECT count() FROM commits WHERE heuristic_score >= 30 AND (ai_quality_score = 0 OR ai_quality_score IS NULL) AND (ai_score_reason IS NULL OR ai_score_reason = '')")[0][0]
 print(f"\n[AI SCORING PROGRESS]")
 print(f"  Completed:            {with_reason:,}")
 print(f"  Pending (score>=30):  {pending:,}")

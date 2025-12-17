@@ -55,17 +55,34 @@ def main():
     
     total_scored = 0
     total_skipped = 0
-    offset = 0
-    consecutive_empty = 0
+    
+    # Track recently processed to avoid immediate re-fetching if DB is slow
+    recently_processed = set()
     
     console.print("\n[yellow]Starting batch scoring...[/yellow]")
     
+    # Get initial count of potential candidates
+    count_query = f"""
+    SELECT count()
+    FROM commits
+    WHERE 
+        heuristic_score >= {min_heuristic}
+        AND (ai_score_reason IS NULL OR ai_score_reason = '')
+    """
+    try:
+        total_available = client.execute(count_query)[0][0]
+        console.print(f"[cyan]Total candidates available: {total_available:,}[/cyan]")
+    except Exception:
+        total_available = 0
+        console.print("[dim]Could not determine total candidates.[/dim]")
+    
     while total_scored < args.limit:
         # Fetch batch with LIMIT and OFFSET to avoid re-processing
-        remaining = args.limit - total_scored
-        current_batch = min(batch_size, remaining + 50)  # Fetch extra in case some fail
+        remaining_limit = args.limit - total_scored
+        current_batch = min(batch_size, remaining_limit + 50)  # Fetch extra in case some fail
         
         # Get commits that haven't been scored yet (no reason = not processed)
+        # We always fetch from OFFSET 0 because we are consuming the queue (processed items drop out)
         commit_query = f"""
         SELECT 
             commit_hash,
@@ -77,7 +94,7 @@ def main():
             heuristic_score >= {min_heuristic}
             AND (ai_score_reason IS NULL OR ai_score_reason = '')
         ORDER BY heuristic_score DESC
-        LIMIT {current_batch} OFFSET {offset}
+        LIMIT {current_batch}
         """
         
         try:
@@ -90,15 +107,28 @@ def main():
             console.print("[yellow]No more candidates found.[/yellow]")
             break
         
-        console.print(f"[dim]Fetched {len(commits)} commits (offset={offset})...[/dim]")
+        # Filter out ones we just processed but might still show up due to async DB updates
+        new_commits = [c for c in commits if c[0] not in recently_processed]
+        if not new_commits:
+            console.print("[dim]Waiting for DB updates to persist...[/dim]")
+            import time
+            time.sleep(2)
+            continue
+            
+        console.print(f"[dim]Fetched {len(new_commits)} candidates...[/dim]")
         
         batch_scored = 0
         batch_skipped = 0
         updates = []
         
-        for commit_hash, instruction, existing_score, existing_reason in commits:
+        for commit_hash, instruction, existing_score, existing_reason in new_commits:
             if total_scored >= args.limit:
                 break
+            
+            recently_processed.add(commit_hash)
+            # Keep set size manageable
+            if len(recently_processed) > 1000:
+                recently_processed.pop()
             
             # Skip if already has a reason (already properly evaluated)
             if existing_reason and len(existing_reason) > 5:
@@ -163,10 +193,8 @@ def main():
             _update_db(client, updates)
         
         # Progress
-        console.print(f"  [green]✓ Scored: {batch_scored}[/green], [yellow]Skipped: {batch_skipped}[/yellow] | Total: {total_scored}/{args.limit}")
-        
-        # Move offset forward
-        offset += len(commits)
+        remaining_candidates = max(0, total_available - total_scored - total_skipped)  # Approx
+        console.print(f"  [green]✓ Scored: {batch_scored}[/green], [yellow]Skipped: {batch_skipped}[/yellow] | Total Session: {total_scored}/{args.limit} | [cyan]Est. Remaining in DB: {remaining_candidates:,}[/cyan]")
         
         # Safety: stop if we've gone through too many without scoring any
         if batch_scored == 0:

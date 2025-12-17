@@ -40,33 +40,41 @@ console = Console()
 
 # Dataset configurations
 DATASETS = {
+    "super_ultra": {
+        "description": "AI-recommended commits (Reasoning contains 'highly valuable for an AI')",
+        "min_heuristic": 0,
+        "min_ai_score": 1,
+        "include_reasoning": True,
+        "limit": 999999999,
+        "reason_filter": "highly valuable for an AI"
+    },
     "premium_score": {
-        "description": "Top quality commits based on heuristic scoring (>=90)",
+        "description": "Top quality commits (Heuristic >= 90, AI Score >= 4)",
         "min_heuristic": 90,
-        "min_ai_score": None,
+        "min_ai_score": 4,
         "include_reasoning": False,
-        "limit": 5000
+        "limit": 999999999
     },
     "high_score": {
-        "description": "High quality commits based on heuristic scoring (>=70)",
+        "description": "High quality commits (Heuristic >= 70, AI Score >= 4)",
         "min_heuristic": 70,
-        "min_ai_score": None,
+        "min_ai_score": 4,
         "include_reasoning": False,
-        "limit": 20000
+        "limit": 999999999
     },
     "premium_reasoning": {
         "description": "Premium commits with AI quality scores and reasoning",
         "min_heuristic": 90,
         "min_ai_score": 4,
         "include_reasoning": True,
-        "limit": 3000
+        "limit": 999999999
     },
     "high_reasoning": {
         "description": "High quality commits with AI quality scores and reasoning",
         "min_heuristic": 70,
         "min_ai_score": 3,
         "include_reasoning": True,
-        "limit": 10000
+        "limit": 999999999
     }
 }
 
@@ -89,6 +97,9 @@ def export_dataset(
     }
     
     # Build query based on config
+    reason_filter = config.get("reason_filter", "")
+    reason_clause = f"AND ai_score_reason LIKE '%{reason_filter}%'" if reason_filter else ""
+    
     if config["min_ai_score"]:
         query = f"""
         SELECT 
@@ -100,6 +111,7 @@ def export_dataset(
         WHERE heuristic_score >= {config['min_heuristic']}
             AND ai_quality_score >= {config['min_ai_score']}
             AND length(ai_score_reason) > 10
+            {reason_clause}
         ORDER BY ai_quality_score DESC, heuristic_score DESC
         LIMIT {config['limit']}
         """
@@ -126,7 +138,7 @@ def export_dataset(
     
     with open(output_path, 'w', encoding='utf-8') as f:
         for commit_hash, instruction, ai_score, ai_reason in tqdm(commits, desc=f"  {name}"):
-            # Get diff and code_before
+            # Get ALL diffs and code_before for this commit
             try:
                 diff_query = """
                 SELECT fc.diff_hunk, fc.code_before 
@@ -135,54 +147,64 @@ def export_dataset(
                     AND fc.file_extension IN ('.c', '.h')
                     AND length(fc.diff_hunk) > %(min_len)s
                     AND length(fc.diff_hunk) < %(max_len)s
-                LIMIT 1
                 """
-                result = client.execute(diff_query, {
+                # Removed LIMIT 1 to get all valid files
+                
+                valid_files = client.execute(diff_query, {
                     'hash': commit_hash,
                     'min_len': MIN_DIFF_LENGTH,
                     'max_len': MAX_DIFF_LENGTH
                 })
                 
-                if not result:
+                if not valid_files:
                     stats["skipped_no_diff"] += 1
                     continue
                 
-                diff, code_before = result[0]
+                # Iterate over ALL valid files in the commit
+                files_exported_for_commit = 0
+                
+                for diff, code_before in valid_files:
+                    # Apply smart context extraction
+                    clean_instruction = validator.clean_instruction(instruction)
+                    clean_input = ""
+                    if code_before:
+                        clean_input = extractor.extract_changed_region(
+                            code_before, diff, INPUT_TRUNCATION_LENGTH
+                        )
+                    clean_output = validator.clean_output(diff, OUTPUT_TRUNCATION_LENGTH)
+                    
+                    # Validate this specific file
+                    is_valid, _ = validator.is_valid(clean_instruction, clean_input, clean_output)
+                    if not is_valid:
+                        # Don't increment skipped_validation here to avoid noise, 
+                        # or track it separately if needed.
+                        continue
+                    
+                    # Build record
+                    record = {
+                        "instruction": clean_instruction,
+                        "input": clean_input,
+                        "output": clean_output,
+                        "commit_hash": commit_hash  # Helpful for linking back
+                    }
+                    
+                    # Add quality score and reasoning
+                    if config["include_reasoning"] and ai_reason:
+                        record["quality_score"] = float(ai_score)
+                        record["quality_reason"] = ai_reason
+                    
+                    line = json.dumps(record, ensure_ascii=False) + '\n'
+                    f.write(line)
+                    stats["exported"] += 1
+                    stats["total_bytes"] += len(line.encode('utf-8'))
+                    files_exported_for_commit += 1
+                
+                if files_exported_for_commit == 0:
+                    stats["skipped_validation"] += 1
+                    
             except Exception:
                 stats["skipped_no_diff"] += 1
                 continue
-            
-            # Apply smart context extraction
-            clean_instruction = validator.clean_instruction(instruction)
-            clean_input = ""
-            if code_before:
-                clean_input = extractor.extract_changed_region(
-                    code_before, diff, INPUT_TRUNCATION_LENGTH
-                )
-            clean_output = validator.clean_output(diff, OUTPUT_TRUNCATION_LENGTH)
-            
-            # Validate
-            is_valid, _ = validator.is_valid(clean_instruction, clean_input, clean_output)
-            if not is_valid:
-                stats["skipped_validation"] += 1
-                continue
-            
-            # Build record - no system column (constant), just instruction/input/output
-            record = {
-                "instruction": clean_instruction,
-                "input": clean_input,
-                "output": clean_output
-            }
-            
-            # Add quality score and reasoning as proper columns (not hidden metadata)
-            if config["include_reasoning"] and ai_reason:
-                record["quality_score"] = float(ai_score)
-                record["quality_reason"] = ai_reason
-            
-            line = json.dumps(record, ensure_ascii=False) + '\n'
-            f.write(line)
-            stats["exported"] += 1
-            stats["total_bytes"] += len(line.encode('utf-8'))
     
     return stats
 
@@ -237,6 +259,32 @@ def main():
         )
         results[tier_name] = stats
     
+    
+    # Merge synthetic data if available
+    synthetic_path = output_dir / "synthetic_gold.jsonl"
+    if synthetic_path.exists():
+        console.print(f"\n[cyan]Merging synthetic data from {synthetic_path}...[/cyan]")
+        synthetic_count = 0
+        
+        # Read synthetic data once
+        synthetic_lines = []
+        with open(synthetic_path, 'r', encoding='utf-8') as f:
+            synthetic_lines = f.readlines()
+            
+        if synthetic_lines:
+            # Append to premium datasets
+            for tier in ["premium_score", "premium_reasoning"]:
+                if tier in tiers_to_export:
+                    dest_path = output_dir / f"{tier}.jsonl"
+                    if dest_path.exists():
+                        with open(dest_path, 'a', encoding='utf-8') as f:
+                            for line in synthetic_lines:
+                                f.write(line)
+                        
+                        results[tier]["exported"] += len(synthetic_lines)
+                        results[tier]["total_bytes"] += sum(len(l) for l in synthetic_lines)
+                        console.print(f"  Added {len(synthetic_lines)} synthetic examples to {tier}")
+
     # Summary table
     console.print("\n" + "=" * 70)
     console.print("[bold green] EXPORT COMPLETE [/bold green]")
